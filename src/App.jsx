@@ -1,15 +1,18 @@
 import React, { useMemo, useState } from 'react';
-import { Home, Calendar, Users, BarChart3 } from 'lucide-react';
+import { Home, Calendar, Users, BarChart3, Settings } from 'lucide-react';
 import AdminAthletes from './components/AdminAthletes.jsx';
 import ScheduleManager from './components/ScheduleManager.jsx';
 import MatchTracker from './components/MatchTracker.jsx';
 import StatsPanel from './components/StatsPanel.jsx';
+import TeamsManager from './components/TeamsManager.jsx';
 
 const GROUPS = ['U13', 'U14', 'U15', 'U16', 'U17'];
 
 export default function App() {
   // Athletes: { [group]: Athlete[] }
   const [athletesByGroup, setAthletesByGroup] = useState(() => Object.fromEntries(GROUPS.map(g => [g, []])));
+  // Teams: { [group]: Team[] }
+  const [teamsByGroup, setTeamsByGroup] = useState(() => Object.fromEntries(GROUPS.map(g => [g, []])));
   // Matches: Array
   const [schedule, setSchedule] = useState([]);
   // Match stats by matchId
@@ -60,6 +63,23 @@ export default function App() {
     });
   };
 
+  const onAddTeam = (team) => {
+    setTeamsByGroup(prev => {
+      const next = { ...prev };
+      next[team.group] = [...(next[team.group] || []), team];
+      return next;
+    });
+  };
+
+  const onRemoveTeam = (team) => {
+    setTeamsByGroup(prev => {
+      const next = { ...prev };
+      next[team.group] = (next[team.group] || []).filter(t => t.id !== team.id);
+      return next;
+    });
+    // If athletes were assigned to this team by name, we keep the string; no change needed.
+  };
+
   const onAddMatch = (match) => {
     setSchedule(prev => [...prev, match]);
   };
@@ -80,6 +100,7 @@ export default function App() {
   const tabs = useMemo(() => ([
     { key: 'match', label: 'Match', icon: Home },
     { key: 'athletes', label: 'Atleti', icon: Users },
+    { key: 'teams', label: 'Squadre', icon: Settings },
     { key: 'schedule', label: 'Calendario', icon: Calendar },
     { key: 'stats', label: 'Statistiche', icon: BarChart3 },
   ]), []);
@@ -113,14 +134,24 @@ export default function App() {
         {tab === 'athletes' && (
           <AdminAthletes
             athletesByGroup={athletesByGroup}
+            teamsByGroup={teamsByGroup}
             onAddAthlete={onAddAthlete}
             onRemoveAthlete={onRemoveAthlete}
+          />
+        )}
+
+        {tab === 'teams' && (
+          <TeamsManager
+            teamsByGroup={teamsByGroup}
+            onAddTeam={onAddTeam}
+            onRemoveTeam={onRemoveTeam}
           />
         )}
 
         {tab === 'schedule' && (
           <ScheduleManager
             schedule={schedule}
+            teamsByGroup={teamsByGroup}
             onAddMatch={onAddMatch}
             onRemoveMatch={onRemoveMatch}
           />

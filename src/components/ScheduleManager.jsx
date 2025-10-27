@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 
 const GROUPS = ['U13', 'U14', 'U15', 'U16', 'U17'];
 
-export default function ScheduleManager({ schedule, onAddMatch, onRemoveMatch }) {
+export default function ScheduleManager({ schedule, teamsByGroup, onAddMatch, onRemoveMatch }) {
   const [group, setGroup] = useState('U13');
   const [date, setDate] = useState('');
   const [home, setHome] = useState('');
@@ -18,6 +18,8 @@ export default function ScheduleManager({ schedule, onAddMatch, onRemoveMatch })
     for (const g of GROUPS) by[g].sort((a,b)=> new Date(a.date) - new Date(b.date));
     return by;
   }, [schedule]);
+
+  const groupTeams = useMemo(() => teamsByGroup[group] || [], [teamsByGroup, group]);
 
   const handleAdd = (e) => {
     e.preventDefault();
@@ -39,17 +41,31 @@ export default function ScheduleManager({ schedule, onAddMatch, onRemoveMatch })
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Categoria</label>
-            <select value={group} onChange={(e)=>setGroup(e.target.value)} className="w-full rounded border px-3 py-2">
+            <select value={group} onChange={(e)=>{setGroup(e.target.value); setHome(''); setAway('');}} className="w-full rounded border px-3 py-2">
               {GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Home</label>
-            <input value={home} onChange={(e)=>setHome(e.target.value)} className="w-full rounded border px-3 py-2" placeholder="Squadra Casa" />
+            {groupTeams.length > 0 ? (
+              <select value={home} onChange={(e)=>setHome(e.target.value)} className="w-full rounded border px-3 py-2">
+                <option value="">— Seleziona —</option>
+                {groupTeams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+              </select>
+            ) : (
+              <input value={home} onChange={(e)=>setHome(e.target.value)} className="w-full rounded border px-3 py-2" placeholder="Squadra Casa" />
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Ospite</label>
-            <input value={away} onChange={(e)=>setAway(e.target.value)} className="w-full rounded border px-3 py-2" placeholder="Squadra Ospite" />
+            {groupTeams.length > 0 ? (
+              <select value={away} onChange={(e)=>setAway(e.target.value)} className="w-full rounded border px-3 py-2">
+                <option value="">— Seleziona —</option>
+                {groupTeams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+              </select>
+            ) : (
+              <input value={away} onChange={(e)=>setAway(e.target.value)} className="w-full rounded border px-3 py-2" placeholder="Squadra Ospite" />
+            )}
           </div>
           <div className="flex items-end">
             <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded px-4 py-2">Aggiungi</button>
