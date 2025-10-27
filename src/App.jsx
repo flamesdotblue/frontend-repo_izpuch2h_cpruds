@@ -37,6 +37,7 @@ export default function App() {
     // Also scrub from stats to avoid orphans
     setMatchStatsById(prev => {
       const clone = structuredClone(prev);
+      const pointsByType = { three: 3, two: 2, layup: 2, freeThrow: 1 };
       for (const mid of Object.keys(clone)) {
         const ms = clone[mid];
         if (!ms) continue;
@@ -44,16 +45,17 @@ export default function App() {
         const rebuilt = { events: ms.events, perPlayer: {} };
         for (const ev of ms.events) {
           if (ev.type === 'foul') {
-            if (!rebuilt.perPlayer[ev.playerId]) rebuilt.perPlayer[ev.playerId] = { attempts: 0, made: 0, points: 0, fouls: 0, breakdown: { layup:{a:0,m:0}, two:{a:0,m:0}, three:{a:0,m:0} } };
+            if (!rebuilt.perPlayer[ev.playerId]) rebuilt.perPlayer[ev.playerId] = { attempts: 0, made: 0, points: 0, fouls: 0, breakdown: { layup:{a:0,m:0}, two:{a:0,m:0}, three:{a:0,m:0}, freeThrow:{a:0,m:0} } };
             rebuilt.perPlayer[ev.playerId].fouls = Math.min(5, rebuilt.perPlayer[ev.playerId].fouls + 1);
           } else {
-            if (!rebuilt.perPlayer[ev.playerId]) rebuilt.perPlayer[ev.playerId] = { attempts: 0, made: 0, points: 0, fouls: 0, breakdown: { layup:{a:0,m:0}, two:{a:0,m:0}, three:{a:0,m:0} } };
+            if (!rebuilt.perPlayer[ev.playerId]) rebuilt.perPlayer[ev.playerId] = { attempts: 0, made: 0, points: 0, fouls: 0, breakdown: { layup:{a:0,m:0}, two:{a:0,m:0}, three:{a:0,m:0}, freeThrow:{a:0,m:0} } };
             rebuilt.perPlayer[ev.playerId].attempts += 1;
+            if (!rebuilt.perPlayer[ev.playerId].breakdown[ev.type]) rebuilt.perPlayer[ev.playerId].breakdown[ev.type] = { a:0, m:0 };
             rebuilt.perPlayer[ev.playerId].breakdown[ev.type].a += 1;
             if (ev.result === 'made') {
               rebuilt.perPlayer[ev.playerId].made += 1;
               rebuilt.perPlayer[ev.playerId].breakdown[ev.type].m += 1;
-              rebuilt.perPlayer[ev.playerId].points += ev.type === 'three' ? 3 : 2;
+              rebuilt.perPlayer[ev.playerId].points += pointsByType[ev.type] || 0;
             }
           }
         }

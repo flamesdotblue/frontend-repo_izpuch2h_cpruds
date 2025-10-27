@@ -5,6 +5,7 @@ const SHOT_TYPES = [
   { key: 'layup', label: 'Terzo tempo', points: 2 },
   { key: 'two', label: 'Tiro da 2', points: 2 },
   { key: 'three', label: 'Tiro da 3', points: 3 },
+  { key: 'freeThrow', label: 'Tiro libero', points: 1 },
 ];
 
 function ensureStats(stats, playerId) {
@@ -14,7 +15,7 @@ function ensureStats(stats, playerId) {
       made: 0,
       points: 0,
       fouls: 0,
-      breakdown: { layup: { a:0,m:0 }, two: { a:0,m:0 }, three: { a:0,m:0 } },
+      breakdown: { layup: { a:0,m:0 }, two: { a:0,m:0 }, three: { a:0,m:0 }, freeThrow: { a:0,m:0 } },
     };
   }
 }
@@ -40,6 +41,7 @@ export default function MatchTracker({ schedule, athletesByGroup, matchStatsById
       ps.fouls = Math.min(5, ps.fouls + 1);
     } else {
       ps.attempts += 1;
+      if (!ps.breakdown[ev.type]) ps.breakdown[ev.type] = { a: 0, m: 0 };
       ps.breakdown[ev.type].a += 1;
       if (ev.result === 'made') {
         ps.made += 1;
@@ -62,6 +64,7 @@ export default function MatchTracker({ schedule, athletesByGroup, matchStatsById
         ps.fouls = Math.min(5, ps.fouls + 1);
       } else {
         ps.attempts += 1;
+        if (!ps.breakdown[ev.type]) ps.breakdown[ev.type] = { a: 0, m: 0 };
         ps.breakdown[ev.type].a += 1;
         if (ev.result === 'made') {
           ps.made += 1;
@@ -131,7 +134,7 @@ export default function MatchTracker({ schedule, athletesByGroup, matchStatsById
                         </div>
                         <button disabled={foulLimit} onClick={()=>handleFoul(a.id)} className={`text-xs px-2 py-1 rounded ${foulLimit? 'bg-gray-200 text-gray-500':'bg-rose-100 text-rose-700 hover:bg-rose-200'}`}>Fallo</button>
                       </div>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-2 gap-2">
                         {SHOT_TYPES.map(s => (
                           <div key={s.key} className="flex gap-1">
                             <button onClick={()=>handleShot(a.id, s.key, 'made')} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded px-2 py-1 text-xs">{s.label} ✓</button>
