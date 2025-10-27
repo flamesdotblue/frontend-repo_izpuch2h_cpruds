@@ -1,179 +1,229 @@
 import React, { useMemo, useState } from 'react';
+import StatsPanel from './StatsPanel';
 
-const PERIODS = ['1°', '2°', '3°', '4°', 'OT'];
-const SHOT_TYPES = [
-  { key: 'layup', label: 'Terzo tempo', points: 2 },
-  { key: 'two', label: 'Tiro da 2', points: 2 },
-  { key: 'three', label: 'Tiro da 3', points: 3 },
-  { key: 'freeThrow', label: 'Tiro libero', points: 1 },
-];
+const SHOT_TYPES = {
+  layup: { label: 'Terzo tempo', points: 2 },
+  two: { label: 'Tiro da 2', points: 2 },
+  three: { label: 'Tiro da 3', points: 3 },
+  freeThrow: { label: 'Tiro libero', points: 1 },
+};
 
-function ensureStats(stats, playerId) {
-  if (!stats[playerId]) {
-    stats[playerId] = {
-      attempts: 0,
-      made: 0,
-      points: 0,
-      fouls: 0,
-      breakdown: { layup: { a:0,m:0 }, two: { a:0,m:0 }, three: { a:0,m:0 }, freeThrow: { a:0,m:0 } },
-    };
-  }
+function uid() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-export default function MatchTracker({ schedule, athletesByGroup, matchStatsById, onUpdateMatchStats }) {
+export default function MatchTracker({
+  schedule,
+  teamsByGroup,
+  athletesByGroup,
+  matchStatsById,
+  setMatchStatsById,
+}) {
   const [selectedMatchId, setSelectedMatchId] = useState('');
-  const [period, setPeriod] = useState('1°');
-  const selectedMatch = useMemo(() => schedule.find(m => m.id === selectedMatchId) || null, [schedule, selectedMatchId]);
-  const groupAthletes = useMemo(() => {
-    if (!selectedMatch) return [];
-    return (athletesByGroup[selectedMatch.group] || []).sort((a,b)=> a.number - b.number);
-  }, [athletesByGroup, selectedMatch]);
+  const [side, setSide] = useState('home'); // home | away
+  const match = useMemo(() => schedule.find((m) => m.id === selectedMatchId), [schedule, selectedMatchId]);
 
-  const current = matchStatsById[selectedMatchId] || { events: [], perPlayer: {} };
+  const teams = useMemo(() => teamsByGroup[match?.group] || [], [teamsByGroup, match]);
+  const teamById = Object.fromEntries(teams.map((t) => [t.id, t]));
+  const athletes = useMemo(() => athletesByGroup[match?.group] || [], [athletesByGroup, match]);
+  const athleteById = Object.fromEntries(athletes.map((a) => [a.id, a]));
 
-  const addEvent = (ev) => {
-    if (!selectedMatch) return;
-    const next = structuredClone(current);
-    next.events.push(ev);
-    ensureStats(next.perPlayer, ev.playerId);
-    const ps = next.perPlayer[ev.playerId];
-    if (ev.type === 'foul') {
-      ps.fouls = Math.min(5, ps.fouls + 1);
+  const statsForMatch = matchStatsById[selectedMatchId] || { events: [], roster: { home: [], away: [] } };
+  const roster = statsForMatch.roster?.[side] || [];
+
+  const team = match ? teamById[match[side + 'Id']] : null;
+  const teamRoster = team?.athleteIds || [];
+
+  const toggleRoster = (athleteId) => {
+    const current = statsForMatch.roster?.[side] || [];
+    const exists = current.includes(athleteId);
+    let next = current;
+    if (exists) {
+      next = current.filter((id) => id !== athleteId);
     } else {
-      ps.attempts += 1;
-      if (!ps.breakdown[ev.type]) ps.breakdown[ev.type] = { a: 0, m: 0 };
-      ps.breakdown[ev.type].a += 1;
-      if (ev.result === 'made') {
-        ps.made += 1;
-        ps.breakdown[ev.type].m += 1;
-        ps.points += SHOT_TYPES.find(s=>s.key===ev.type)?.points || 0;
-      }
+      if (current.length >= 12) return; // max 12 convocati
+      next = [...current, athleteId];
     }
-    onUpdateMatchStats(selectedMatchId, next);
+    const updated = {
+      ...matchStatsById,
+      [selectedMatchId]: {
+        events: statsForMatch.events || [],
+        roster: {
+          home: side === 'home' ? next : (statsForMatch.roster?.home || []),
+          away: side === 'away' ? next : (statsForMatch.roster?.away || []),
+        },
+      },
+    };
+    setMatchStatsById(updated);
   };
 
-  const removeEvent = (index) => {
-    if (!selectedMatch) return;
-    const next = { events: [], perPlayer: {} };
-    const remaining = current.events.filter((_,i)=> i !== index);
-    // Recompute perPlayer from scratch to keep it simple and robust
-    for (const ev of remaining) {
-      ensureStats(next.perPlayer, ev.playerId);
-      const ps = next.perPlayer[ev.playerId];
-      if (ev.type === 'foul') {
-        ps.fouls = Math.min(5, ps.fouls + 1);
-      } else {
-        ps.attempts += 1;
-        if (!ps.breakdown[ev.type]) ps.breakdown[ev.type] = { a: 0, m: 0 };
-        ps.breakdown[ev.type].a += 1;
-        if (ev.result === 'made') {
-          ps.made += 1;
-          ps.breakdown[ev.type].m += 1;
-          ps.points += SHOT_TYPES.find(s=>s.key===ev.type)?.points || 0;
-        }
-      }
-    }
-    next.events = remaining;
-    onUpdateMatchStats(selectedMatchId, next);
+  const addEvent = (payload) => {
+    if (!selectedMatchId) return;
+    if (!payload.athleteId) return;
+    const nextEvent = { id: uid(), ts: Date.now(), side, ...payload };
+    const updated = {
+      ...matchStatsById,
+      [selectedMatchId]: {
+        events: [...(statsForMatch.events || []), nextEvent],
+        roster: statsForMatch.roster || { home: [], away: [] },
+      },
+    };
+    setMatchStatsById(updated);
   };
 
-  const handleShot = (playerId, type, result) => {
-    addEvent({ id: crypto.randomUUID(), ts: Date.now(), period, playerId, type, result });
+  const removeEvent = (id) => {
+    const updated = {
+      ...matchStatsById,
+      [selectedMatchId]: {
+        events: (statsForMatch.events || []).filter((e) => e.id !== id),
+        roster: statsForMatch.roster || { home: [], away: [] },
+      },
+    };
+    setMatchStatsById(updated);
   };
 
-  const handleFoul = (playerId) => {
-    addEvent({ id: crypto.randomUUID(), ts: Date.now(), period, playerId, type: 'foul' });
-  };
+  const eventsForSide = (statsForMatch.events || []).filter((e) => e.side === side);
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white/80 backdrop-blur rounded-xl p-4 shadow">
-        <h2 className="text-xl font-semibold mb-4">Tracciamento Match</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-sm font-medium mb-1">Seleziona Match</label>
-            <select value={selectedMatchId} onChange={(e)=>setSelectedMatchId(e.target.value)} className="w-full rounded border px-3 py-2">
-              <option value="">— Seleziona —</option>
-              {schedule.map(m => (
-                <option key={m.id} value={m.id}>{m.group} • {m.home} vs {m.away} • {new Date(m.date).toLocaleString()}</option>
-              ))}
-            </select>
+    <div className="bg-white rounded-xl shadow p-4 space-y-4">
+      <h2 className="font-semibold text-lg">Match Tracker</h2>
+
+      <div className="grid md:grid-cols-3 gap-3 items-end">
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Partita</label>
+          <select
+            value={selectedMatchId}
+            onChange={(e) => setSelectedMatchId(e.target.value)}
+            className="w-full border rounded px-2 py-2"
+          >
+            <option value="">Seleziona</option>
+            {schedule.map((m) => (
+              <option key={m.id} value={m.id}>
+                {new Date(m.date).toLocaleString()} • {m.group}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Lato</label>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSide('home')}
+              className={`px-3 py-2 rounded border ${side === 'home' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white'}`}
+            >Casa</button>
+            <button
+              onClick={() => setSide('away')}
+              className={`px-3 py-2 rounded border ${side === 'away' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white'}`}
+            >Ospiti</button>
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Tempo</label>
-            <select value={period} onChange={(e)=>setPeriod(e.target.value)} className="w-full rounded border px-3 py-2">
-              {PERIODS.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-          <div className="flex items-end">
-            <div className="w-full rounded border px-3 py-2 bg-gray-50 text-sm">
-              {selectedMatch ? `${selectedMatch.home} vs ${selectedMatch.away} (${selectedMatch.group})` : 'Nessun match selezionato'}
-            </div>
+        </div>
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Squadra selezionata</label>
+          <div className="px-3 py-2 border rounded bg-slate-50">
+            {team ? team.name : '—'}
           </div>
         </div>
       </div>
 
-      {selectedMatch && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 space-y-4">
-            <div className="bg-white/80 backdrop-blur rounded-xl p-4 shadow">
-              <h3 className="font-semibold mb-3">Roster {selectedMatch.group}</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {groupAthletes.map(a => {
-                  const st = current.perPlayer[a.id] || { points: 0, fouls: 0 };
-                  const foulLimit = st.fouls >= 5;
-                  return (
-                    <div key={a.id} className="border rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-blue-700 font-semibold">{a.number}</span>
-                          <div>
-                            <div className="font-medium">{a.name}</div>
-                            <div className="text-xs text-gray-500">Falli: {st.fouls}/5 • Punti: {st.points}</div>
-                          </div>
+      {selectedMatchId && team && (
+        <div className="grid lg:grid-cols-2 gap-4">
+          <div className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-medium">Convocati ({roster.length}/12)</h3>
+                <span className="text-xs text-gray-500">Seleziona fino a 12 atleti</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {teamRoster.map((id) => (
+                  <button
+                    key={id}
+                    onClick={() => toggleRoster(id)}
+                    className={`text-left px-3 py-2 rounded border ${
+                      roster.includes(id) ? 'bg-emerald-50 border-emerald-500' : 'bg-white'
+                    }`}
+                  >
+                    <div className="font-medium text-sm">{athleteById[id]?.name || '—'}</div>
+                    <div className="text-xs text-gray-500">ID: {id.slice(-4)}</div>
+                  </button>
+                ))}
+                {teamRoster.length === 0 && (
+                  <div className="text-sm text-gray-500">La squadra non ha atleti assegnati.</div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="font-medium">Eventi rapidi</h3>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {roster.map((athleteId) => (
+                  <div key={athleteId} className="p-3 rounded border">
+                    <div className="font-medium mb-2">{athleteById[athleteId]?.name}</div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => addEvent({ type: 'foul', athleteId })}
+                        className="px-2 py-1 rounded bg-orange-100 text-orange-700 border border-orange-300"
+                      >Fall</button>
+
+                      {Object.entries(SHOT_TYPES).map(([key, meta]) => (
+                        <div key={key} className="flex items-center gap-1">
+                          <button
+                            onClick={() => addEvent({ type: key, made: true, athleteId })}
+                            className="px-2 py-1 rounded bg-emerald-100 text-emerald-700 border border-emerald-300"
+                          >{meta.label} ✓</button>
+                          <button
+                            onClick={() => addEvent({ type: key, made: false, athleteId })}
+                            className="px-2 py-1 rounded bg-rose-100 text-rose-700 border border-rose-300"
+                          >{meta.label} ✕</button>
                         </div>
-                        <button disabled={foulLimit} onClick={()=>handleFoul(a.id)} className={`text-xs px-2 py-1 rounded ${foulLimit? 'bg-gray-200 text-gray-500':'bg-rose-100 text-rose-700 hover:bg-rose-200'}`}>Fallo</button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {SHOT_TYPES.map(s => (
-                          <div key={s.key} className="flex gap-1">
-                            <button onClick={()=>handleShot(a.id, s.key, 'made')} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded px-2 py-1 text-xs">{s.label} ✓</button>
-                            <button onClick={()=>handleShot(a.id, s.key, 'miss')} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded px-2 py-1 text-xs">{s.label} ✕</button>
-                          </div>
-                        ))}
-                      </div>
+                      ))}
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
+                {roster.length === 0 && (
+                  <div className="text-sm text-gray-500">Seleziona i convocati per abilitare gli eventi.</div>
+                )}
               </div>
             </div>
           </div>
+
           <div className="space-y-4">
-            <div className="bg-white/80 backdrop-blur rounded-xl p-4 shadow">
-              <h3 className="font-semibold mb-3">Eventi</h3>
-              <ul className="space-y-2 max-h-[420px] overflow-auto pr-1">
-                {current.events.length === 0 && (
-                  <li className="text-sm text-gray-500">Nessun evento registrato</li>
+            <StatsPanel
+              events={eventsForSide}
+              roster={roster}
+              athletesById={athleteById}
+            />
+
+            <div className="bg-slate-50 rounded-xl p-3">
+              <h3 className="font-semibold mb-2">Log eventi</h3>
+              <ul className="space-y-1 max-h-64 overflow-auto">
+                {eventsForSide.slice().reverse().map((e) => (
+                  <li key={e.id} className="flex items-center justify-between bg-white border rounded p-2">
+                    <div className="text-sm">
+                      <span className="font-medium">{athleteById[e.athleteId]?.name}</span>{' '}
+                      {e.type === 'foul' ? (
+                        <span className="text-orange-700">fallo</span>
+                      ) : (
+                        <>
+                          <span className="text-slate-600">{SHOT_TYPES[e.type]?.label || e.type}</span>{' '}
+                          <span className={e.made ? 'text-emerald-700' : 'text-rose-700'}>{e.made ? '✓' : '✕'}</span>
+                        </>
+                      )}
+                      <span className="text-xs text-gray-500 ml-2">{new Date(e.ts).toLocaleTimeString()}</span>
+                    </div>
+                    <button onClick={() => removeEvent(e.id)} className="text-xs text-red-600 hover:underline">Elimina</button>
+                  </li>
+                ))}
+                {eventsForSide.length === 0 && (
+                  <li className="text-sm text-gray-500">Nessun evento per questo lato.</li>
                 )}
-                {current.events.map((ev, idx) => {
-                  const player = groupAthletes.find(a=>a.id===ev.playerId);
-                  const label = ev.type === 'foul' ? 'Fallo' : SHOT_TYPES.find(s=>s.key===ev.type)?.label;
-                  const res = ev.type === 'foul' ? '' : ev.result === 'made' ? '✓' : '✕';
-                  return (
-                    <li key={ev.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-2">
-                      <div className="text-sm">
-                        <span className="text-gray-500 mr-1">[{ev.period}]</span>
-                        <span className="font-medium">{player ? `#${player.number} ${player.name}` : 'Giocatore'}</span>
-                        <span className="ml-2">{label} {res}</span>
-                      </div>
-                      <button onClick={()=>removeEvent(idx)} className="text-xs text-red-600 hover:underline">Elimina</button>
-                    </li>
-                  );
-                })}
               </ul>
             </div>
           </div>
         </div>
+      )}
+
+      {selectedMatchId && !team && (
+        <div className="text-sm text-red-600">Seleziona una partita valida con squadre esistenti.</div>
       )}
     </div>
   );

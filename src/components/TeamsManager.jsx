@@ -1,56 +1,81 @@
 import React, { useMemo, useState } from 'react';
+import { GROUPS } from './AdminAthletes';
 
-const GROUPS = ['U13', 'U14', 'U15', 'U16', 'U17'];
+function uid() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
 
-export default function TeamsManager({ teamsByGroup, onAddTeam, onRemoveTeam }) {
-  const [group, setGroup] = useState('U13');
+export default function TeamsManager({ athletesByGroup, teamsByGroup, setTeamsByGroup }) {
+  const [group, setGroup] = useState(GROUPS[0]);
   const [teamName, setTeamName] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
 
-  const teams = useMemo(() => teamsByGroup[group] || [], [teamsByGroup, group]);
+  const athletes = useMemo(() => athletesByGroup[group] || [], [athletesByGroup, group]);
+  const teams = teamsByGroup[group] || [];
 
-  const handleAdd = (e) => {
-    e.preventDefault();
-    const name = teamName.trim();
-    if (!name) return;
-    if (teams.some(t => t.name.toLowerCase() === name.toLowerCase())) return;
-    onAddTeam({ id: crypto.randomUUID(), name, group });
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const createTeam = () => {
+    if (!teamName.trim()) return;
+    const nextTeam = { id: uid(), name: teamName.trim(), athleteIds: selectedIds };
+    const next = { ...teamsByGroup, [group]: [...teams, nextTeam] };
+    setTeamsByGroup(next);
     setTeamName('');
+    setSelectedIds([]);
+  };
+
+  const removeTeam = (id) => {
+    setTeamsByGroup({ ...teamsByGroup, [group]: teams.filter((t) => t.id !== id) });
   };
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white/80 backdrop-blur rounded-xl p-4 shadow">
-        <h2 className="text-xl font-semibold mb-4">Gestione Squadre</h2>
-        <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <div>
-            <label className="block text-sm font-medium mb-1">Categoria</label>
-            <select value={group} onChange={(e)=>setGroup(e.target.value)} className="w-full rounded border px-3 py-2">
-              {GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium mb-1">Nome Squadra</label>
-            <input value={teamName} onChange={(e)=>setTeamName(e.target.value)} className="w-full rounded border px-3 py-2" placeholder="Es. Tigers U14" />
-          </div>
-          <div className="flex items-end">
-            <button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white rounded px-4 py-2">Aggiungi</button>
-          </div>
-        </form>
+    <div className="bg-white rounded-xl shadow p-4 space-y-4">
+      <div className="flex items-center gap-3">
+        <h2 className="font-semibold text-lg">Gestione Squadre</h2>
+        <select value={group} onChange={(e) => setGroup(e.target.value)} className="border rounded px-2 py-1">
+          {GROUPS.map((g) => (
+            <option key={g} value={g}>{g}</option>
+          ))}
+        </select>
       </div>
 
-      <div className="bg-white/80 backdrop-blur rounded-xl p-4 shadow">
-        <h3 className="font-semibold mb-3">Elenco {group}</h3>
-        <ul className="divide-y">
-          {teams.length === 0 && (
-            <li className="py-4 text-sm text-gray-500">Nessuna squadra inserita per {group}</li>
-          )}
-          {teams.map(t => (
-            <li key={t.id} className="flex items-center justify-between py-3">
-              <div className="font-medium">{t.name}</div>
-              <button onClick={() => onRemoveTeam(t)} className="text-red-600 hover:underline text-sm">Rimuovi</button>
-            </li>
-          ))}
-        </ul>
+      <div className="grid md:grid-cols-2 gap-4">
+        <div>
+          <h3 className="font-medium mb-2">Crea squadra</h3>
+          <input
+            value={teamName}
+            onChange={(e) => setTeamName(e.target.value)}
+            placeholder="Nome squadra"
+            className="w-full border rounded px-3 py-2 mb-2"
+          />
+          <div className="max-h-48 overflow-auto border rounded p-2 space-y-1">
+            {athletes.map((a) => (
+              <label key={a.id} className="flex items-center gap-2">
+                <input type="checkbox" checked={selectedIds.includes(a.id)} onChange={() => toggleSelect(a.id)} />
+                <span>{a.name}</span>
+              </label>
+            ))}
+            {athletes.length === 0 && <div className="text-sm text-gray-500">Aggiungi atleti nel gruppo selezionato.</div>}
+          </div>
+          <button onClick={createTeam} className="mt-2 px-3 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700">Crea squadra</button>
+        </div>
+        <div>
+          <h3 className="font-medium mb-2">Squadre esistenti</h3>
+          <ul className="divide-y">
+            {teams.map((t) => (
+              <li key={t.id} className="py-2 flex items-center justify-between">
+                <div>
+                  <div className="font-medium">{t.name}</div>
+                  <div className="text-xs text-gray-500">Atleti: {t.athleteIds.length}</div>
+                </div>
+                <button onClick={() => removeTeam(t.id)} className="text-red-600 hover:underline">Rimuovi</button>
+              </li>
+            ))}
+            {teams.length === 0 && <li className="py-4 text-sm text-gray-500">Nessuna squadra nel gruppo.</li>}
+          </ul>
+        </div>
       </div>
     </div>
   );

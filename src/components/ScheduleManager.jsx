@@ -1,99 +1,82 @@
 import React, { useMemo, useState } from 'react';
+import { GROUPS } from './AdminAthletes';
 
-const GROUPS = ['U13', 'U14', 'U15', 'U16', 'U17'];
+function uid() {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
 
-export default function ScheduleManager({ schedule, teamsByGroup, onAddMatch, onRemoveMatch }) {
-  const [group, setGroup] = useState('U13');
+export default function ScheduleManager({ teamsByGroup, schedule, setSchedule }) {
+  const [group, setGroup] = useState(GROUPS[0]);
   const [date, setDate] = useState('');
-  const [home, setHome] = useState('');
-  const [away, setAway] = useState('');
+  const [homeId, setHomeId] = useState('');
+  const [awayId, setAwayId] = useState('');
 
-  const grouped = useMemo(() => {
-    const by = {};
-    for (const g of GROUPS) by[g] = [];
-    for (const m of schedule) {
-      if (!by[m.group]) by[m.group] = [];
-      by[m.group].push(m);
-    }
-    for (const g of GROUPS) by[g].sort((a,b)=> new Date(a.date) - new Date(b.date));
-    return by;
-  }, [schedule]);
+  const teams = useMemo(() => teamsByGroup[group] || [], [teamsByGroup, group]);
 
-  const groupTeams = useMemo(() => teamsByGroup[group] || [], [teamsByGroup, group]);
-
-  const handleAdd = (e) => {
-    e.preventDefault();
-    if (!date || !home.trim() || !away.trim()) return;
-    onAddMatch({ id: crypto.randomUUID(), date, home: home.trim(), away: away.trim(), group });
+  const addMatch = () => {
+    if (!date || !homeId || !awayId || homeId === awayId) return;
+    const match = { id: uid(), date, group, homeId, awayId };
+    setSchedule([...schedule, match]);
     setDate('');
-    setHome('');
-    setAway('');
+    setHomeId('');
+    setAwayId('');
   };
 
+  const removeMatch = (id) => setSchedule(schedule.filter((m) => m.id !== id));
+
+  const nameById = Object.fromEntries(teams.map((t) => [t.id, t.name]));
+
   return (
-    <div className="space-y-6">
-      <div className="bg-white/80 backdrop-blur rounded-xl p-4 shadow">
-        <h2 className="text-xl font-semibold mb-4">Calendario Match</h2>
-        <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <div>
-            <label className="block text-sm font-medium mb-1">Data</label>
-            <input type="datetime-local" value={date} onChange={(e)=>setDate(e.target.value)} className="w-full rounded border px-3 py-2" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Categoria</label>
-            <select value={group} onChange={(e)=>{setGroup(e.target.value); setHome(''); setAway('');}} className="w-full rounded border px-3 py-2">
-              {GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Home</label>
-            {groupTeams.length > 0 ? (
-              <select value={home} onChange={(e)=>setHome(e.target.value)} className="w-full rounded border px-3 py-2">
-                <option value="">— Seleziona —</option>
-                {groupTeams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
-              </select>
-            ) : (
-              <input value={home} onChange={(e)=>setHome(e.target.value)} className="w-full rounded border px-3 py-2" placeholder="Squadra Casa" />
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Ospite</label>
-            {groupTeams.length > 0 ? (
-              <select value={away} onChange={(e)=>setAway(e.target.value)} className="w-full rounded border px-3 py-2">
-                <option value="">— Seleziona —</option>
-                {groupTeams.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
-              </select>
-            ) : (
-              <input value={away} onChange={(e)=>setAway(e.target.value)} className="w-full rounded border px-3 py-2" placeholder="Squadra Ospite" />
-            )}
-          </div>
-          <div className="flex items-end">
-            <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded px-4 py-2">Aggiungi</button>
-          </div>
-        </form>
+    <div className="bg-white rounded-xl shadow p-4 space-y-4">
+      <div className="flex items-center gap-3">
+        <h2 className="font-semibold text-lg">Calendario Partite</h2>
+        <select value={group} onChange={(e) => setGroup(e.target.value)} className="border rounded px-2 py-1">
+          {GROUPS.map((g) => (
+            <option key={g} value={g}>{g}</option>
+          ))}
+        </select>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {GROUPS.map(g => (
-          <div key={g} className="bg-white/80 backdrop-blur rounded-xl p-4 shadow">
-            <h3 className="font-semibold mb-3">{g}</h3>
-            <ul className="divide-y">
-              {grouped[g].length === 0 && (
-                <li className="py-4 text-sm text-gray-500">Nessun match programmato</li>
-              )}
-              {grouped[g].map(m => (
-                <li key={m.id} className="flex items-center justify-between py-3">
-                  <div>
-                    <div className="font-medium">{m.home} vs {m.away}</div>
-                    <div className="text-xs text-gray-500">{new Date(m.date).toLocaleString()}</div>
-                  </div>
-                  <button onClick={() => onRemoveMatch(m)} className="text-red-600 hover:underline text-sm">Rimuovi</button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+      <div className="grid md:grid-cols-4 gap-2 items-end">
+        <div className="md:col-span-1">
+          <label className="block text-sm text-gray-600 mb-1">Data</label>
+          <input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} className="w-full border rounded px-3 py-2" />
+        </div>
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Casa</label>
+          <select value={homeId} onChange={(e) => setHomeId(e.target.value)} className="w-full border rounded px-2 py-2">
+            <option value="">Seleziona squadra</option>
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm text-gray-600 mb-1">Ospiti</label>
+          <select value={awayId} onChange={(e) => setAwayId(e.target.value)} className="w-full border rounded px-2 py-2">
+            <option value="">Seleziona squadra</option>
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+        <button onClick={addMatch} className="px-3 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700">Aggiungi</button>
       </div>
+
+      <ul className="divide-y">
+        {schedule.filter((m) => m.group === group).map((m) => (
+          <li key={m.id} className="py-2 flex items-center justify-between">
+            <div>
+              <div className="font-medium">{nameById[m.homeId] || '—'} vs {nameById[m.awayId] || '—'}</div>
+              <div className="text-xs text-gray-500">{new Date(m.date).toLocaleString()} • {m.group}</div>
+            </div>
+            <button onClick={() => removeMatch(m.id)} className="text-red-600 hover:underline">Rimuovi</button>
+          </li>
+        ))}
+        {schedule.filter((m) => m.group === group).length === 0 && (
+          <li className="py-4 text-sm text-gray-500">Nessuna partita per questo gruppo.</li>
+        )}
+      </ul>
     </div>
   );
 }
